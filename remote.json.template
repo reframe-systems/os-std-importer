@@ -1,6 +1,6 @@
 {
     "useProxy": false,
-    "url": "https://cad.onshape.com/api/v14",
+    "URL": "https://cad.onshape.com/api/v14",
     "accessKey": "<Onshape access key>",
     "secretKey": "<Onshape secret key>",
     "proxyKey": "<ReframeApiKey — proxy gate credential>",

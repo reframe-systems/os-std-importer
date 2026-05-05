@@ -51,7 +51,7 @@ The settings file is gitignored. Copy `remote.json.template`, name it `remote.js
 
 | Field | Description |
 |-------|-------------|
-| `url` | API base URL — `https://cad.onshape.com/api/v14` for direct; `https://onshape.reframe.quest/api/v12` or `http://localhost:5080/api/v12` for proxy |
+| `URL` | API base URL — `https://cad.onshape.com/api/v14` for direct; `https://onshape.reframe.quest/api/v12` or `http://localhost:5080/api/v12` for proxy |
 | `useProxy` | `false` → auth with `accessKey` + `secretKey`; `true` → auth with `onshapeKey` + `proxyKey` |
 
 ## Pre-commit hook

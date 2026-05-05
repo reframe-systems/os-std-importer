@@ -33,7 +33,7 @@ type Settings struct {
 	AccessKey  string `json:"accessKey"`
 	SecretKey  string `json:"secretKey"`
 	UseProxy   bool   `json:"useProxy"`
-	URL        string `json:"url"`
+	URL        string `json:"URL"`
 	ProxyKey   string `json:"proxyKey"`
 	OnshapeKey string `json:"onshapeKey"`
 }

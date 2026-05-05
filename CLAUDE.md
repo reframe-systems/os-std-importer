@@ -27,8 +27,9 @@ go build         # produces ./os-std-importer binary
 
 The settings file (gitignored) selects the API endpoint. `-settings` defaults to `remote.json`; see `remote.json.template` for all fields.
 
+- `url` — required in all modes; set to the API base URL (e.g. `https://cad.onshape.com/api/v14` for direct, `https://onshape.reframe.quest/api/v12` for production proxy, `http://localhost:5080/api/v12` for local proxy)
 - `useProxy: false` — direct Onshape API; requires `accessKey` + `secretKey`
-- `useProxy: true` — via a Reframe proxy; requires `onshapeKey` + `proxyKey` and a `proxyURL` (production: `https://onshape.reframe.quest`, local dev: `http://localhost:5080`)
+- `useProxy: true` — via a Reframe proxy; requires `onshapeKey` + `proxyKey`
 
 The pre-commit hook in `hooks/pre-commit` blocks commits that include credential files. To install: `cp hooks/pre-commit .git/hooks/pre-commit`.
 

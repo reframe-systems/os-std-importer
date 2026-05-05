@@ -33,7 +33,7 @@ type Settings struct {
 	AccessKey  string `json:"accessKey"`
 	SecretKey  string `json:"secretKey"`
 	UseProxy   bool   `json:"useProxy"`
-	ProxyURL   string `json:"proxyURL"`
+	URL        string `json:"url"`
 	ProxyKey   string `json:"proxyKey"`
 	OnshapeKey string `json:"onshapeKey"`
 }
@@ -74,6 +74,9 @@ func loadSettings(filename string) (Settings, error) {
 	if err = json.Unmarshal(data, &s); err != nil {
 		return Settings{}, fmt.Errorf("invalid JSON in settings file: %w", err)
 	}
+	if s.URL == "" {
+		return Settings{}, fmt.Errorf("url missing (e.g. https://cad.onshape.com/api/v14)")
+	}
 	if s.UseProxy {
 		if s.OnshapeKey == "" {
 			return Settings{}, fmt.Errorf("onshapeKey missing (required when useProxy is true)")
@@ -93,14 +96,7 @@ func loadSettings(filename string) (Settings, error) {
 }
 
 func apiGet(s Settings, endpoint string, params url.Values) []byte {
-	resolvedEndpoint := endpoint
-	if s.UseProxy {
-		proxyBase := s.ProxyURL
-		if proxyBase == "" {
-			proxyBase = "http://localhost:5080"
-		}
-		resolvedEndpoint = strings.Replace(endpoint, "https://cad.onshape.com/api/v14", proxyBase+"/api/v12", 1)
-	}
+	resolvedEndpoint := strings.Replace(endpoint, apiBase, s.URL, 1)
 
 	fullURL := resolvedEndpoint
 	if len(params) > 0 {

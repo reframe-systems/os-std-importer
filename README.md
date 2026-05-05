@@ -49,10 +49,10 @@ go build    # produces ./os-std-importer
 
 The settings file is gitignored. Copy `remote.json.template`, name it `remote.json` (the default), and fill in your keys:
 
-| `useProxy` | Auth fields | Endpoint |
-|-----------|-------------|----------|
-| `false` | `accessKey` + `secretKey` | Onshape API directly |
-| `true` | `onshapeKey` + `proxyKey` | Reframe proxy — set `proxyURL` to `https://onshape.reframe.quest` for production or `http://localhost:5080` for local dev |
+| Field | Description |
+|-------|-------------|
+| `url` | API base URL — `https://cad.onshape.com/api/v14` for direct; `https://onshape.reframe.quest/api/v12` or `http://localhost:5080/api/v12` for proxy |
+| `useProxy` | `false` → auth with `accessKey` + `secretKey`; `true` → auth with `onshapeKey` + `proxyKey` |
 
 ## Pre-commit hook
 

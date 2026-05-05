@@ -26,12 +26,10 @@ go build         # produces ./os-std-importer binary
 
 ## Credentials
 
-Two settings files (both gitignored) select the target endpoint:
+The settings file (gitignored) selects the API endpoint. `-settings` defaults to `remote.json`; see `remote.json.template` for all fields.
 
-- `remote.json` — production/CI use; `useProxy: false` uses `accessKey`/`secretKey` against the Onshape API directly; `useProxy: true` uses `onshapeKey`/`proxyKey` via the Reframe production proxy (`https://onshape.reframe.quest`)
-- `local.json` — local development; `useProxy: true`, points to `http://localhost:5080`
-
-`-settings=<file>` defaults to `remote.json`. See `remote.json.template` and `local.json.template` for all fields.
+- `useProxy: false` — direct Onshape API; requires `accessKey` + `secretKey`
+- `useProxy: true` — via a Reframe proxy; requires `onshapeKey` + `proxyKey` and a `proxyURL` (production: `https://onshape.reframe.quest`, local dev: `http://localhost:5080`)
 
 The pre-commit hook in `hooks/pre-commit` blocks commits that include credential files. To install: `cp hooks/pre-commit .git/hooks/pre-commit`.
 

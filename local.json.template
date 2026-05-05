@@ -1,6 +1,0 @@
-{
-    "useProxy": true,
-    "proxyURL": "http://localhost:5080",
-    "proxyKey": "<ReframeApiKey — proxy gate credential>",
-    "onshapeKey": "<pre-computed base64 Basic Auth token for Onshape>"
-}

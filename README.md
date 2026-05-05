@@ -46,12 +46,12 @@ go build    # produces ./os-std-importer
 
 ## Credentials
 
-Two settings files select the API endpoint. Both are gitignored — copy the relevant template and fill in your keys:
+The settings file is gitignored. Copy `remote.json.template`, name it `remote.json` (the default), and fill in your keys:
 
-| File | Template | When to use |
-|------|----------|-------------|
-| `remote.json` | `remote.json.template` | Production/CI — set `useProxy: false` for direct Onshape API (`accessKey` + `secretKey`), or `useProxy: true` for the Reframe production proxy (`onshapeKey` + `proxyKey`) |
-| `local.json` | `local.json.template` | Local development — proxy at `http://localhost:5080` (`onshapeKey` + `proxyKey`) |
+| `useProxy` | Auth fields | Endpoint |
+|-----------|-------------|----------|
+| `false` | `accessKey` + `secretKey` | Onshape API directly |
+| `true` | `onshapeKey` + `proxyKey` | Reframe proxy — set `proxyURL` to `https://onshape.reframe.quest` for production or `http://localhost:5080` for local dev |
 
 ## Pre-commit hook
 

@@ -13,16 +13,15 @@ go build         # produces ./os-std-importer binary
 ```
 
 ```sh
-./os-std-importer [-settings=<file>] [-out=<dir>] [-dry-run] [-verbose] [onshape-doc-url]
-# e.g.: ./os-std-importer -out=../onshape-std -verbose
-# e.g.: ./os-std-importer -settings=proxy.json -out=../onshape-std https://cad.onshape.com/documents/12312...
+./os-std-importer --settings=<file> --out=<dir> [-d] [-v] [--onshape-doc-url=<url>]
+# e.g.: ./os-std-importer --settings=local.json --out=../os-std
+# e.g.: ./os-std-importer --settings=remote.json --out=../os-std -d
 ```
 
-- `onshape-doc-url` is optional; defaults to the canonical Onshape Standard Library document URL.
-- `-settings` defaults to `direct.json`.
-- `-out` defaults to `.` (the git repo to commit into).
-- `-dry-run` checks the latest Onshape version and reports whether an update is needed, but does not download files or create commits.
-- `-verbose` prints each element name as it is fetched.
+- `--settings` and `--out` are required.
+- `--onshape-doc-url` is optional; defaults to the canonical Onshape Standard Library document URL.
+- `-d` checks the latest Onshape version and reports whether an update is needed, but does not download files or create commits.
+- `-v` prints each element name as it is fetched.
 
 ## Credentials
 

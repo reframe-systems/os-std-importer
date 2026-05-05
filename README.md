@@ -31,18 +31,19 @@ go build    # produces ./os-std-importer
 
 ```sh
 # typical usage
-./os-std-importer -settings=proxy.json -out=../os-std-mirror
+./os-std-importer --settings=remote.json --out=../os-std-mirror
 
 # check whether an update is available without downloading anything
-./os-std-importer -settings=proxy.json -out=../os-std-mirror -dry-run
+./os-std-importer --settings=remote.json --out=../os-std-mirror -d
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-settings` | `direct.json` | Credentials file to use |
-| `-out` | `.` | Output git repo to commit into |
-| `-dry-run` | false | Check version only; no download or commit |
-| `-verbose` | false | Print each element name as it is fetched |
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--settings=<file>` | yes | Credentials/endpoint config; see `remote.json.template` |
+| `--out=<dir>` | yes | Output git repo to commit into |
+| `-d` | no | Dry run: check version only, no download or commit |
+| `-v` | no | Verbose: print each element name as fetched |
+| `--onshape-doc-url=<url>` | no | Target document (default: Onshape standard library) |
 
 ## Credentials
 

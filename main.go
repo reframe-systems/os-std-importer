@@ -251,29 +251,50 @@ func commitWithoutVersions(outDir, versionName, date string) {
 }
 
 func main() {
-	settingsFlag := flag.String("settings", "remote.json", "settings file (remote.json, local.json)")
-	outFlag := flag.String("out", ".", "output directory (git repo to commit into)")
-	dryRunFlag := flag.Bool("dry-run", false, "check version only, no download or commit")
-	verboseFlag := flag.Bool("verbose", false, "print element names as fetched")
+	settingsFlag := flag.String("settings", "", "")
+	outFlag := flag.String("out", "", "")
+	dryRunFlag := flag.Bool("d", false, "")
+	verboseFlag := flag.Bool("v", false, "")
+	docURLFlag := flag.String("onshape-doc-url", "", "")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: os-std-importer [-settings=<file>] [-out=<dir>] [-dry-run] [-verbose] [onshape-doc-url]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: os-std-importer --settings=<file> --out=<dir> [-d] [-v] [--onshape-doc-url=<url>]\n\n")
 		fmt.Fprintf(os.Stderr, "Imports FeatureScript elements from an Onshape document into a local git repo.\n")
-		fmt.Fprintf(os.Stderr, "Commits new content to the with-versions branch, then strips version strings\n")
-		fmt.Fprintf(os.Stderr, "and commits to the without-versions branch. Both branches must already exist.\n\n")
-		fmt.Fprintf(os.Stderr, "When no URL is given, targets the Onshape standard library document.\n\n")
-		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nCredential modes (set in settings file):\n")
-		fmt.Fprintf(os.Stderr, "  remote (useProxy=false):  accessKey + secretKey  (direct Onshape API)\n")
-		fmt.Fprintf(os.Stderr, "  remote (useProxy=true):   onshapeKey + proxyKey  (via Reframe production proxy)\n")
-		fmt.Fprintf(os.Stderr, "  local  (useProxy=true):   onshapeKey + proxyKey  (via local proxy at localhost:5080)\n")
+		fmt.Fprintf(os.Stderr, "Commits to the with-versions branch, then strips version strings and commits\n")
+		fmt.Fprintf(os.Stderr, "to without-versions. Both branches must already exist in the output repo.\n\n")
+		fmt.Fprintf(os.Stderr, "Required:\n")
+		fmt.Fprintf(os.Stderr, "  --settings=<file>         Credentials/endpoint config; see remote.json.template\n")
+		fmt.Fprintf(os.Stderr, "  --out=<dir>               Output git repo to commit into\n\n")
+		fmt.Fprintf(os.Stderr, "Optional:\n")
+		fmt.Fprintf(os.Stderr, "  -d                        Dry run: check version only, no download or commit\n")
+		fmt.Fprintf(os.Stderr, "  -v                        Verbose: print each element name as fetched\n")
+		fmt.Fprintf(os.Stderr, "  --onshape-doc-url=<url>   Target document (default: Onshape standard library)\n\n")
+		fmt.Fprintf(os.Stderr, "Credential modes (useProxy field in settings file):\n")
+		fmt.Fprintf(os.Stderr, "  false   accessKey + secretKey   direct Onshape API\n")
+		fmt.Fprintf(os.Stderr, "  true    onshapeKey + proxyKey   via Reframe proxy (set proxyURL for endpoint)\n")
 	}
 
 	flag.Parse()
 
+	if len(os.Args) == 1 {
+		flag.Usage()
+		os.Exit(0)
+	}
+
+	if *settingsFlag == "" {
+		fmt.Fprintf(os.Stderr, "error: --settings is required\n\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+	if *outFlag == "" {
+		fmt.Fprintf(os.Stderr, "error: --out is required\n\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	docURL := defaultDocURL
-	if args := flag.Args(); len(args) > 0 {
-		docURL = args[0]
+	if *docURLFlag != "" {
+		docURL = *docURLFlag
 	}
 
 	s, err := loadSettings(*settingsFlag)

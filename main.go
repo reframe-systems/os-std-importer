@@ -217,7 +217,7 @@ func stripVersions(outDir string) {
 		data, err := os.ReadFile(f)
 		goutil.Verify(err == nil, "failed to read %s: %v", f, err)
 		content := string(data)
-		content = fsVersionRe.ReplaceAllString(content, `${1}; /** without versions **/`)
+		content = fsVersionRe.ReplaceAllString(content, `${1};`)
 		content = importVersionRe.ReplaceAllString(content, `, version : ""`)
 		err = os.WriteFile(f, []byte(content), 0644)
 		goutil.Verify(err == nil, "failed to write %s: %v", f, err)

@@ -204,7 +204,7 @@ func downloadElements(s Settings, docID, outDir, versionID string, verbose bool)
 		}
 		goutil.Verboseln(verbose, el.Name)
 		contents := getFeatureStudioSource(s, docID, versionID, el.ID)
-		path := filepath.Join(outDir, el.Name+".fs")
+		path := filepath.Join(outDir, strings.TrimSuffix(el.Name, ".fs")+".fs")
 		err := os.WriteFile(path, []byte(contents), 0644)
 		goutil.Verify(err == nil, "failed to write %s: %v", path, err)
 	}

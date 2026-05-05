@@ -321,5 +321,6 @@ func main() {
 	appendImportLog(*outFlag, version.Name, date)
 	commitWithVersions(*outFlag, version.Name, date)
 	commitWithoutVersions(*outFlag, version.Name, date)
+	gitRun(*outFlag, "tag", version.Name, "with-versions")
 	fmt.Printf("Done. Committed version %s to both branches.\n", version.Name)
 }

@@ -1,6 +1,5 @@
-# credentials
-remote.json
-local.json
+# real credentials
+*.json
 
 # compiled binary
 os-std-importer

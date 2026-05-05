@@ -54,6 +54,17 @@ The settings file is gitignored. Copy `remote.json.template`, name it `remote.js
 | `URL` | API base URL — `https://cad.onshape.com/api/v14` for direct; `https://onshape.reframe.quest/api/v12` or `http://localhost:5080/api/v12` for proxy |
 | `useProxy` | `false` → auth with `accessKey` + `secretKey`; `true` → auth with `onshapeKey` + `proxyKey` |
 
+### Local proxy setup
+
+When using a local proxy (`URL: http://localhost:5080/api/v12`, `useProxy: true`), the proxy process must be started with a matching key:
+
+```sh
+export ONSHAPE_PROXY_KEY="your-key-here"
+# start the local proxy
+```
+
+The `proxyKey` value in your settings file must match `ONSHAPE_PROXY_KEY` exactly. The proxy uses this to authenticate requests from the importer.
+
 ## Pre-commit hook
 
 A hook is included that blocks accidental commits of credential files:

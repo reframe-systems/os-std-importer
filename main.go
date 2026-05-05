@@ -1,0 +1,296 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/BurntSushi/toml"
+	"github.com/jnewth/goutil"
+)
+
+const (
+	defaultDocURL = "https://cad.onshape.com/documents/12312312345abcabcabcdeff/w/a855e4161c814f2e9ab3698a"
+	apiBase       = "https://cad.onshape.com/api/v14"
+)
+
+var (
+	fsVersionRe     = regexp.MustCompile(`(?m)^(FeatureScript )[\d.]+;`)
+	importVersionRe = regexp.MustCompile(`, version : "[\d.]+"`)
+)
+
+type Settings struct {
+	AccessKey  string `json:"accessKey"`
+	SecretKey  string `json:"secretKey"`
+	UseProxy   bool   `json:"useProxy"`
+	ProxyURL   string `json:"proxyURL"`
+	ProxyKey   string `json:"proxyKey"`
+	OnshapeKey string `json:"onshapeKey"`
+}
+
+type Version struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Microversion string `json:"microversion"`
+	CreatedAt    string `json:"createdAt"`
+}
+
+type Element struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	ElementType string `json:"elementType"`
+	DataType    string `json:"dataType"`
+}
+
+type FeatureStudioResponse struct {
+	Contents string `json:"contents"`
+}
+
+type ImportEntry struct {
+	Version   string `toml:"version"`
+	Retrieved string `toml:"retrieved"`
+}
+
+type ImportLog struct {
+	Entry []ImportEntry `toml:"entry"`
+}
+
+func loadSettings(filename string) Settings {
+	data, err := os.ReadFile(filename)
+	goutil.Verify(err == nil, "failed to read %s: %v", filename, err)
+	var s Settings
+	err = json.Unmarshal(data, &s)
+	goutil.Verify(err == nil, "failed to parse JSON in %s: %v", filename, err)
+	if s.UseProxy {
+		goutil.Verify(s.OnshapeKey != "", "onshapeKey missing in %s (required for proxy mode)", filename)
+		goutil.Verify(s.ProxyKey != "", "proxyKey missing in %s (required for proxy mode)", filename)
+	} else {
+		goutil.Verify(s.AccessKey != "", "accessKey missing in %s (required for direct mode)", filename)
+		goutil.Verify(s.SecretKey != "", "secretKey missing in %s (required for direct mode)", filename)
+	}
+	return s
+}
+
+func apiGet(s Settings, endpoint string, params url.Values) []byte {
+	resolvedEndpoint := endpoint
+	if s.UseProxy {
+		proxyBase := s.ProxyURL
+		if proxyBase == "" {
+			proxyBase = "http://localhost:5080"
+		}
+		resolvedEndpoint = strings.Replace(endpoint, "https://cad.onshape.com/api/v14", proxyBase+"/api/v12", 1)
+	}
+
+	fullURL := resolvedEndpoint
+	if len(params) > 0 {
+		fullURL += "?" + params.Encode()
+	}
+	req, err := http.NewRequest("GET", fullURL, nil)
+	goutil.Verify(err == nil, "failed to build request: %v", err)
+	req.Header.Set("Accept", "application/json;charset=UTF-8; qs=0.09")
+	if s.UseProxy {
+		req.Header.Set("Authorization", "Basic "+s.OnshapeKey)
+		req.Header.Set("ReframeApiKey", s.ProxyKey)
+	} else {
+		req.SetBasicAuth(s.AccessKey, s.SecretKey)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	goutil.Verify(err == nil, "request failed: %v", err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	goutil.Verify(err == nil, "failed to read response body: %v", err)
+	goutil.Verify(resp.StatusCode >= 200 && resp.StatusCode < 300,
+		"request to %s returned HTTP %d: %s", fullURL, resp.StatusCode, string(body))
+	return body
+}
+
+var docIDRe = regexp.MustCompile(`documents/(\w+)`)
+
+func parseOnshapePath(rawURL string) string {
+	m := docIDRe.FindStringSubmatch(rawURL)
+	goutil.Verify(len(m) == 2, "failed to extract document ID from URL: %s", rawURL)
+	return m[1]
+}
+
+func getLatestVersion(s Settings, docID string) Version {
+	endpoint := fmt.Sprintf("%s/documents/d/%s/versions", apiBase, docID)
+	body := apiGet(s, endpoint, url.Values{})
+	var versions []Version
+	err := json.Unmarshal(body, &versions)
+	goutil.Verify(err == nil, "failed to parse versions response: %v", err)
+	goutil.Verify(len(versions) > 0, "no versions found for document %s", docID)
+	return versions[len(versions)-1]
+}
+
+const importLogHeader = "# Onshape Standard Library import history.\n# Maintained by os-std-importer; do not edit manually.\n\n"
+
+func readLatestImportedVersion(outDir string) string {
+	cmd := exec.Command("git", "show", "with-versions:import-log.toml")
+	cmd.Dir = outDir
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	var log ImportLog
+	if _, err := toml.Decode(string(out), &log); err != nil || len(log.Entry) == 0 {
+		return ""
+	}
+	return log.Entry[len(log.Entry)-1].Version
+}
+
+func appendImportLog(outDir, version, retrieved string) {
+	path := filepath.Join(outDir, "import-log.toml")
+	var log ImportLog
+	if data, err := os.ReadFile(path); err == nil {
+		toml.Decode(string(data), &log) //nolint: errcheck — missing file is handled above
+	}
+	log.Entry = append(log.Entry, ImportEntry{Version: version, Retrieved: retrieved})
+	var buf bytes.Buffer
+	buf.WriteString(importLogHeader)
+	err := toml.NewEncoder(&buf).Encode(log)
+	goutil.Verify(err == nil, "failed to encode import-log.toml: %v", err)
+	err = os.WriteFile(path, buf.Bytes(), 0644)
+	goutil.Verify(err == nil, "failed to write import-log.toml: %v", err)
+}
+
+func listElements(s Settings, docID, versionID string) []Element {
+	endpoint := fmt.Sprintf("%s/documents/d/%s/v/%s/elements", apiBase, docID, versionID)
+	params := url.Values{}
+	params.Set("withThumbnails", "false")
+	body := apiGet(s, endpoint, params)
+	var elements []Element
+	err := json.Unmarshal(body, &elements)
+	goutil.Verify(err == nil, "failed to parse elements response: %v", err)
+	return elements
+}
+
+func getFeatureStudioSource(s Settings, docID, versionID, eid string) string {
+	endpoint := fmt.Sprintf("%s/featurestudios/d/%s/v/%s/e/%s", apiBase, docID, versionID, eid)
+	body := apiGet(s, endpoint, url.Values{})
+	var resp FeatureStudioResponse
+	err := json.Unmarshal(body, &resp)
+	goutil.Verify(err == nil, "failed to parse feature studio response: %v", err)
+	return resp.Contents
+}
+
+func downloadElements(s Settings, docID, outDir, versionID string, verbose bool) {
+	existing, err := filepath.Glob(filepath.Join(outDir, "*.fs"))
+	goutil.Verify(err == nil, "failed to glob .fs files: %v", err)
+	for _, f := range existing {
+		goutil.Verify(os.Remove(f) == nil, "failed to delete %s", f)
+	}
+
+	elements := listElements(s, docID, versionID)
+	for _, el := range elements {
+		if !strings.EqualFold(el.ElementType, "FEATURESTUDIO") {
+			continue
+		}
+		goutil.Verboseln(verbose, el.Name)
+		contents := getFeatureStudioSource(s, docID, versionID, el.ID)
+		path := filepath.Join(outDir, el.Name+".fs")
+		err := os.WriteFile(path, []byte(contents), 0644)
+		goutil.Verify(err == nil, "failed to write %s: %v", path, err)
+	}
+}
+
+func stripVersions(outDir string) {
+	files, err := filepath.Glob(filepath.Join(outDir, "*.fs"))
+	goutil.Verify(err == nil, "failed to glob .fs files: %v", err)
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		goutil.Verify(err == nil, "failed to read %s: %v", f, err)
+		content := string(data)
+		content = fsVersionRe.ReplaceAllString(content, `${1}; /** without versions **/`)
+		content = importVersionRe.ReplaceAllString(content, `, version : ""`)
+		err = os.WriteFile(f, []byte(content), 0644)
+		goutil.Verify(err == nil, "failed to write %s: %v", f, err)
+	}
+}
+
+func gitRun(dir string, args ...string) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	goutil.Verify(err == nil, "git %s failed: %v", strings.Join(args, " "), err)
+}
+
+func commitWithVersions(outDir, versionName, date string) {
+	gitRun(outDir, "add", "-A")
+	gitRun(outDir, "commit", "-m", fmt.Sprintf("version: %s retrieved: %s", versionName, date))
+}
+
+func commitWithoutVersions(outDir, versionName, date string) {
+	gitRun(outDir, "checkout", "without-versions")
+	gitRun(outDir, "checkout", "with-versions", "--", ".")
+	stripVersions(outDir)
+	gitRun(outDir, "add", "-A")
+	gitRun(outDir, "commit", "-m", fmt.Sprintf("version: %s retrieved: %s without-versions", versionName, date))
+}
+
+func main() {
+	settingsFlag := flag.String("settings", "remote.json", "settings file (remote.json, local.json)")
+	outFlag := flag.String("out", ".", "output directory (git repo to commit into)")
+	dryRunFlag := flag.Bool("dry-run", false, "check version only, no download or commit")
+	verboseFlag := flag.Bool("verbose", false, "print element names as fetched")
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: os-std-importer [-settings=<file>] [-out=<dir>] [-dry-run] [-verbose] [onshape-doc-url]\n\n")
+		fmt.Fprintf(os.Stderr, "Imports FeatureScript elements from an Onshape document into a local git repo.\n")
+		fmt.Fprintf(os.Stderr, "Commits new content to the with-versions branch, then strips version strings\n")
+		fmt.Fprintf(os.Stderr, "and commits to the without-versions branch. Both branches must already exist.\n\n")
+		fmt.Fprintf(os.Stderr, "When no URL is given, targets the Onshape standard library document.\n\n")
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nCredential modes (set in settings file):\n")
+		fmt.Fprintf(os.Stderr, "  remote (useProxy=false):  accessKey + secretKey  (direct Onshape API)\n")
+		fmt.Fprintf(os.Stderr, "  remote (useProxy=true):   onshapeKey + proxyKey  (via Reframe production proxy)\n")
+		fmt.Fprintf(os.Stderr, "  local  (useProxy=true):   onshapeKey + proxyKey  (via local proxy at localhost:5080)\n")
+	}
+
+	flag.Parse()
+
+	docURL := defaultDocURL
+	if args := flag.Args(); len(args) > 0 {
+		docURL = args[0]
+	}
+
+	if _, err := os.Stat(*settingsFlag); os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "error: settings file %q not found\n\n", *settingsFlag)
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	docID := parseOnshapePath(docURL)
+	s := loadSettings(*settingsFlag)
+	version := getLatestVersion(s, docID)
+	last := readLatestImportedVersion(*outFlag)
+
+	if last == version.Name {
+		fmt.Println("Repo is at or ahead of Onshape document version")
+		os.Exit(0)
+	}
+
+	if *dryRunFlag {
+		fmt.Printf("New version available: %s\n", version.Name)
+		os.Exit(0)
+	}
+
+	date := time.Now().Format("2006-01-02")
+	gitRun(*outFlag, "checkout", "with-versions")
+	downloadElements(s, docID, *outFlag, version.ID, *verboseFlag)
+	appendImportLog(*outFlag, version.Name, date)
+	commitWithVersions(*outFlag, version.Name, date)
+	commitWithoutVersions(*outFlag, version.Name, date)
+	fmt.Printf("Done. Committed version %s to both branches.\n", version.Name)
+}

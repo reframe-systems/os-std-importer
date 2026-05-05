@@ -1,0 +1,8 @@
+{
+    "useProxy": false,
+    "accessKey": "<Onshape access key>",
+    "secretKey": "<Onshape secret key>",
+    "proxyURL": "https://onshape.reframe.quest",
+    "proxyKey": "<ReframeApiKey — proxy gate credential>",
+    "onshapeKey": "<pre-computed base64 Basic Auth token for Onshape>"
+}

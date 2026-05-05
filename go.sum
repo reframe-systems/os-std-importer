@@ -1,0 +1,4 @@
+github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk=
+github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
+github.com/jnewth/goutil v0.0.0-20251117175602-c68e7cea16c0 h1:2KHEf+nbL7Z6FSIN7z7msISVY9wYnOpiVUVWpiSsz58=
+github.com/jnewth/goutil v0.0.0-20251117175602-c68e7cea16c0/go.mod h1:XJP6tpGsEPWY3EXUlnMXhJzlYB/azQbBEsvFGBemFDU=

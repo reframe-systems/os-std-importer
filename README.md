@@ -1,0 +1,62 @@
+# os-std-importer
+
+A Go CLI tool that fetches all FeatureScript elements from the [Onshape Standard Library](https://cad.onshape.com/documents/12312312345abcabcabcdeff/w/a855e4161c814f2e9ab3698a) document and commits them into a local git repository. Designed to run on a schedule; exits immediately with no changes if the repo is already at the latest Onshape version.
+
+## Output
+
+The imported library is published at **[jnewth-reframe/os-std-mirror](https://github.com/jnewth-reframe/os-std-mirror/)**, maintained on two branches:
+
+- **`with-versions`** — each commit mirrors an Onshape document version exactly, including `import-log.toml` (a history of all imports with version name and retrieval date). Commit messages include the Onshape version name.
+- **`without-versions`** — identical file tree, but with FeatureScript version strings stripped and `import-log.toml` omitted. Useful for diffing purely on content changes across Onshape releases.
+
+## How it works
+
+1. Fetches the list of versions for the target Onshape document and identifies the latest.
+2. Reads `import-log.toml` from the `with-versions` branch of the output repo. If the latest Onshape version is already recorded there, exits immediately — safe to call repeatedly.
+3. Downloads all FeatureScript elements from that document version.
+4. Writes `.fs` files into the output repo, appends an entry to `import-log.toml`, and commits to `with-versions`.
+5. Checks out `without-versions`, copies the `.fs` files over, strips version strings, and commits (without `import-log.toml`).
+
+The tool never creates branches or pushes — both branches must already exist, and pushing is the caller's responsibility.
+
+## Build and run
+
+```sh
+go build    # produces ./os-std-importer
+```
+
+```sh
+./os-std-importer [-settings=<file>] [-out=<dir>] [-dry-run] [-verbose] [onshape-doc-url]
+```
+
+```sh
+# typical usage
+./os-std-importer -settings=proxy.json -out=../os-std-mirror
+
+# check whether an update is available without downloading anything
+./os-std-importer -settings=proxy.json -out=../os-std-mirror -dry-run
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-settings` | `direct.json` | Credentials file to use |
+| `-out` | `.` | Output git repo to commit into |
+| `-dry-run` | false | Check version only; no download or commit |
+| `-verbose` | false | Print each element name as it is fetched |
+
+## Credentials
+
+Two settings files select the API endpoint. Both are gitignored — copy the relevant template and fill in your keys:
+
+| File | Template | When to use |
+|------|----------|-------------|
+| `remote.json` | `remote.json.template` | Production/CI — set `useProxy: false` for direct Onshape API (`accessKey` + `secretKey`), or `useProxy: true` for the Reframe production proxy (`onshapeKey` + `proxyKey`) |
+| `local.json` | `local.json.template` | Local development — proxy at `http://localhost:5080` (`onshapeKey` + `proxyKey`) |
+
+## Pre-commit hook
+
+A hook is included that blocks accidental commits of credential files:
+
+```sh
+cp hooks/pre-commit .git/hooks/pre-commit
+```

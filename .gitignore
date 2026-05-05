@@ -1,0 +1,9 @@
+# credentials
+remote.json
+local.json
+
+# compiled binary
+os-std-importer
+
+# Claude internal state
+.claude/

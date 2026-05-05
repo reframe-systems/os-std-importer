@@ -65,20 +65,31 @@ type ImportLog struct {
 	Entry []ImportEntry `toml:"entry"`
 }
 
-func loadSettings(filename string) Settings {
+func loadSettings(filename string) (Settings, error) {
 	data, err := os.ReadFile(filename)
-	goutil.Verify(err == nil, "failed to read %s: %v", filename, err)
-	var s Settings
-	err = json.Unmarshal(data, &s)
-	goutil.Verify(err == nil, "failed to parse JSON in %s: %v", filename, err)
-	if s.UseProxy {
-		goutil.Verify(s.OnshapeKey != "", "onshapeKey missing in %s (required for proxy mode)", filename)
-		goutil.Verify(s.ProxyKey != "", "proxyKey missing in %s (required for proxy mode)", filename)
-	} else {
-		goutil.Verify(s.AccessKey != "", "accessKey missing in %s (required for direct mode)", filename)
-		goutil.Verify(s.SecretKey != "", "secretKey missing in %s (required for direct mode)", filename)
+	if err != nil {
+		return Settings{}, fmt.Errorf("could not read settings file: %w", err)
 	}
-	return s
+	var s Settings
+	if err = json.Unmarshal(data, &s); err != nil {
+		return Settings{}, fmt.Errorf("invalid JSON in settings file: %w", err)
+	}
+	if s.UseProxy {
+		if s.OnshapeKey == "" {
+			return Settings{}, fmt.Errorf("onshapeKey missing (required when useProxy is true)")
+		}
+		if s.ProxyKey == "" {
+			return Settings{}, fmt.Errorf("proxyKey missing (required when useProxy is true)")
+		}
+	} else {
+		if s.AccessKey == "" {
+			return Settings{}, fmt.Errorf("accessKey missing (required when useProxy is false)")
+		}
+		if s.SecretKey == "" {
+			return Settings{}, fmt.Errorf("secretKey missing (required when useProxy is false)")
+		}
+	}
+	return s, nil
 }
 
 func apiGet(s Settings, endpoint string, params url.Values) []byte {
@@ -265,14 +276,15 @@ func main() {
 		docURL = args[0]
 	}
 
-	if _, err := os.Stat(*settingsFlag); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "error: settings file %q not found\n\n", *settingsFlag)
+	s, err := loadSettings(*settingsFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading %q: %v\n", *settingsFlag, err)
+		fmt.Fprintf(os.Stderr, "Copy remote.json.template to %s and fill in your credentials.\n\n", *settingsFlag)
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	docID := parseOnshapePath(docURL)
-	s := loadSettings(*settingsFlag)
 	version := getLatestVersion(s, docID)
 	last := readLatestImportedVersion(*outFlag)
 

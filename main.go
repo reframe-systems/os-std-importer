@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
+	lambdaruntime "github.com/aws/aws-lambda-go/lambda"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-	lambdaruntime "github.com/aws/aws-lambda-go/lambda"
-	"github.com/BurntSushi/toml"
 	"github.com/jnewth/goutil"
 )
 
@@ -240,7 +240,7 @@ func gitRun(dir string, args ...string) {
 
 func commitWithVersions(outDir, versionName, date string) {
 	gitRun(outDir, "add", "-A")
-	gitRun(outDir, "commit", "-m", fmt.Sprintf("version: %s retrieved: %s", versionName, date))
+	gitRun(outDir, "commit", "-m", fmt.Sprintf("%s (%s)", versionName, date))
 }
 
 func commitWithoutVersions(outDir, versionName, date string) {
@@ -248,7 +248,7 @@ func commitWithoutVersions(outDir, versionName, date string) {
 	gitRun(outDir, "checkout", "with-versions", "--", ".")
 	stripVersions(outDir)
 	gitRun(outDir, "add", "-A")
-	gitRun(outDir, "commit", "-m", fmt.Sprintf("version: %s retrieved: %s without-versions", versionName, date))
+	gitRun(outDir, "commit", "-m", fmt.Sprintf("%s (%s) no versions", versionName, date))
 }
 
 // runImport executes the full import cycle. If push is true, both branches and

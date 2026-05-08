@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,6 +16,9 @@ import (
 	"strings"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	lambdaruntime "github.com/aws/aws-lambda-go/lambda"
 	"github.com/BurntSushi/toml"
 	"github.com/jnewth/goutil"
 )
@@ -36,6 +40,7 @@ type Settings struct {
 	URL        string `json:"URL"`
 	ProxyKey   string `json:"proxyKey"`
 	OnshapeKey string `json:"onshapeKey"`
+	DeployKey  string `json:"-"` // Lambda only: PEM private key for git push
 }
 
 type Version struct {
@@ -246,7 +251,152 @@ func commitWithoutVersions(outDir, versionName, date string) {
 	gitRun(outDir, "commit", "-m", fmt.Sprintf("version: %s retrieved: %s without-versions", versionName, date))
 }
 
+// runImport executes the full import cycle. If push is true, both branches and
+// all tags are pushed to origin after committing (Lambda mode).
+func runImport(s Settings, outDir, docURL string, dryRun, verbose, push bool) error {
+	if docURL == "" {
+		docURL = defaultDocURL
+	}
+	docID := parseOnshapePath(docURL)
+	version := getLatestVersion(s, docID)
+	last := readLatestImportedVersion(outDir)
+
+	if last == version.Name {
+		fmt.Println("Repo is at or ahead of Onshape document version")
+		return nil
+	}
+
+	if dryRun {
+		fmt.Printf("New version available: %s\n", version.Name)
+		return nil
+	}
+
+	date := time.Now().Format("2006-01-02")
+	gitRun(outDir, "checkout", "with-versions")
+	downloadElements(s, docID, outDir, version.ID, verbose)
+	appendImportLog(outDir, version.Name, date)
+	commitWithVersions(outDir, version.Name, date)
+	commitWithoutVersions(outDir, version.Name, date)
+	gitRun(outDir, "tag", version.Name, "with-versions")
+
+	if push {
+		gitRun(outDir, "push", "origin", "with-versions")
+		gitRun(outDir, "push", "origin", "without-versions")
+		gitRun(outDir, "push", "origin", "--tags")
+	}
+
+	fmt.Printf("Done. Committed version %s to both branches.\n", version.Name)
+	return nil
+}
+
+// --- Lambda mode ---
+
+func isLambdaMode() bool {
+	return os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != ""
+}
+
+// setupDeployKey writes the PEM key to /tmp/deploy_key and sets GIT_SSH_COMMAND
+// so all subsequent git shell-outs use it for SSH authentication.
+func setupDeployKey(keyPEM string) error {
+	if err := os.WriteFile("/tmp/deploy_key", []byte(keyPEM), 0600); err != nil {
+		return fmt.Errorf("writing deploy key: %w", err)
+	}
+	return os.Setenv("GIT_SSH_COMMAND", "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no")
+}
+
+func fetchSecret(ctx context.Context, client *secretsmanager.Client, name string) (string, error) {
+	out, err := client.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+		SecretId: &name,
+	})
+	if err != nil {
+		return "", fmt.Errorf("fetching secret %q: %w", name, err)
+	}
+	return *out.SecretString, nil
+}
+
+func loadLambdaSettings(ctx context.Context) (Settings, string, string, error) {
+	mustEnv := func(key string) (string, error) {
+		v := os.Getenv(key)
+		if v == "" {
+			return "", fmt.Errorf("required env var %s is not set", key)
+		}
+		return v, nil
+	}
+
+	apiURL, err := mustEnv("ONSHAPE_API_URL")
+	if err != nil {
+		return Settings{}, "", "", err
+	}
+	repoURL, err := mustEnv("GITHUB_REPO_URL")
+	if err != nil {
+		return Settings{}, "", "", err
+	}
+	secretOnshapeKey, err := mustEnv("SECRET_ONSHAPE_KEY")
+	if err != nil {
+		return Settings{}, "", "", err
+	}
+	secretProxyKey, err := mustEnv("SECRET_PROXY_KEY")
+	if err != nil {
+		return Settings{}, "", "", err
+	}
+	secretDeployKey, err := mustEnv("SECRET_DEPLOY_KEY")
+	if err != nil {
+		return Settings{}, "", "", err
+	}
+	docURL := os.Getenv("ONSHAPE_DOC_URL") // optional; empty means use default
+
+	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		return Settings{}, "", "", fmt.Errorf("loading AWS config: %w", err)
+	}
+	smc := secretsmanager.NewFromConfig(cfg)
+
+	onshapeKey, err := fetchSecret(ctx, smc, secretOnshapeKey)
+	if err != nil {
+		return Settings{}, "", "", err
+	}
+	proxyKey, err := fetchSecret(ctx, smc, secretProxyKey)
+	if err != nil {
+		return Settings{}, "", "", err
+	}
+	deployKey, err := fetchSecret(ctx, smc, secretDeployKey)
+	if err != nil {
+		return Settings{}, "", "", err
+	}
+
+	s := Settings{
+		UseProxy:   true,
+		URL:        apiURL,
+		OnshapeKey: onshapeKey,
+		ProxyKey:   proxyKey,
+		DeployKey:  deployKey,
+	}
+	return s, repoURL, docURL, nil
+}
+
+func cloneRepo(repoURL, destDir string) {
+	os.RemoveAll(destDir) // clean up any remnant from a warm invocation
+	gitRun("/tmp", "clone", repoURL, destDir)
+}
+
+func lambdaHandler(ctx context.Context, _ json.RawMessage) error {
+	s, repoURL, docURL, err := loadLambdaSettings(ctx)
+	if err != nil {
+		return err
+	}
+	if err := setupDeployKey(s.DeployKey); err != nil {
+		return err
+	}
+	cloneRepo(repoURL, "/tmp/work")
+	return runImport(s, "/tmp/work", docURL, false, true, true)
+}
+
 func main() {
+	if isLambdaMode() {
+		lambdaruntime.Start(lambdaHandler)
+		return
+	}
+
 	settingsFlag := flag.String("settings", "", "")
 	outFlag := flag.String("out", "", "")
 	dryRunFlag := flag.Bool("d", false, "")
@@ -288,11 +438,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	docURL := defaultDocURL
-	if *docURLFlag != "" {
-		docURL = *docURLFlag
-	}
-
 	s, err := loadSettings(*settingsFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error loading %q: %v\n", *settingsFlag, err)
@@ -301,26 +446,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	docID := parseOnshapePath(docURL)
-	version := getLatestVersion(s, docID)
-	last := readLatestImportedVersion(*outFlag)
-
-	if last == version.Name {
-		fmt.Println("Repo is at or ahead of Onshape document version")
-		os.Exit(0)
+	if err := runImport(s, *outFlag, *docURLFlag, *dryRunFlag, *verboseFlag, false); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
-
-	if *dryRunFlag {
-		fmt.Printf("New version available: %s\n", version.Name)
-		os.Exit(0)
-	}
-
-	date := time.Now().Format("2006-01-02")
-	gitRun(*outFlag, "checkout", "with-versions")
-	downloadElements(s, docID, *outFlag, version.ID, *verboseFlag)
-	appendImportLog(*outFlag, version.Name, date)
-	commitWithVersions(*outFlag, version.Name, date)
-	commitWithoutVersions(*outFlag, version.Name, date)
-	gitRun(*outFlag, "tag", version.Name, "with-versions")
-	fmt.Printf("Done. Committed version %s to both branches.\n", version.Name)
 }

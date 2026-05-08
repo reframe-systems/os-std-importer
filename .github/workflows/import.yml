@@ -1,0 +1,58 @@
+name: Import Onshape Standard Library
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # 9 AM UTC daily
+  workflow_dispatch:       # allow manual trigger from GitHub UI
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build -o os-std-importer .
+
+      - name: Set up SSH deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "GIT_SSH_COMMAND=ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=no" >> $GITHUB_ENV
+
+      - name: Clone os-std-mirror
+        run: git clone git@github.com:reframe-systems/os-std-mirror.git /tmp/os-std-mirror
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      - name: Create settings
+        env:
+          ONSHAPE_KEY: ${{ secrets.ONSHAPE_KEY }}
+          PROXY_KEY: ${{ secrets.PROXY_KEY }}
+        run: |
+          jq -n \
+            --arg url "https://onshape.reframe.quest/api/v12" \
+            --arg onshapeKey "$ONSHAPE_KEY" \
+            --arg proxyKey "$PROXY_KEY" \
+            '{useProxy: true, URL: $url, onshapeKey: $onshapeKey, proxyKey: $proxyKey}' \
+            > /tmp/settings.json
+
+      - name: Run importer
+        run: ./os-std-importer --settings=/tmp/settings.json --out=/tmp/os-std-mirror
+
+      - name: Push
+        run: |
+          git -C /tmp/os-std-mirror push origin with-versions
+          git -C /tmp/os-std-mirror push origin without-versions
+          git -C /tmp/os-std-mirror push origin --tags

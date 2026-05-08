@@ -1,8 +1,13 @@
 # real credentials
 *.json
 
-# compiled binary
+# compiled binaries
 os-std-importer
+os-std-importer-linux
 
 # Claude internal state
 .claude/
+
+# local scratch files
+scratch
+lambda-env.json

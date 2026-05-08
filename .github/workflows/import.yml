@@ -24,9 +24,6 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DEPLOY_KEY }}
 
-      - name: Debug SSH connection
-        run: ssh -T git@github.com || true
-
       - name: Clone os-std-mirror
         run: git clone git@github.com:reframe-systems/os-std-mirror.git /tmp/os-std-mirror
 
@@ -48,9 +45,18 @@ jobs:
             > /tmp/settings.json
 
       - name: Run importer
-        run: ./os-std-importer --settings=/tmp/settings.json --out=/tmp/os-std-mirror
+        id: importer
+        run: |
+          output=$(./os-std-importer --settings=/tmp/settings.json --out=/tmp/os-std-mirror)
+          echo "$output"
+          if echo "$output" | grep -q "Done. Committed"; then
+            echo "imported=true" >> $GITHUB_OUTPUT
+          else
+            echo "imported=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Push
+        if: steps.importer.outputs.imported == 'true'
         run: |
           git -C /tmp/os-std-mirror push origin with-versions
           git -C /tmp/os-std-mirror push origin without-versions

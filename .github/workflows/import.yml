@@ -24,6 +24,9 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DEPLOY_KEY }}
 
+      - name: Debug SSH connection
+        run: ssh -T git@github.com || true
+
       - name: Clone os-std-mirror
         run: git clone git@github.com:reframe-systems/os-std-mirror.git /tmp/os-std-mirror
 

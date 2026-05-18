@@ -2,7 +2,7 @@ name: Import Onshape Standard Library
 
 on:
   schedule:
-    - cron: '0 9 * * *'  # 9 AM UTC daily
+    - cron: '0 2 * * 6'  # Friday 9 PM ET (Saturday 2 AM UTC)
   workflow_dispatch:       # allow manual trigger from GitHub UI
 
 jobs:

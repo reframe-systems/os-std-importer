@@ -4,7 +4,7 @@ A Go CLI tool that fetches all FeatureScript elements from the [Onshape Standard
 
 ## Output
 
-The imported library is published at **[jnewth-reframe/os-std-mirror](https://github.com/jnewth-reframe/os-std-mirror/)**, maintained on two branches:
+The imported library is published at **[reframe-systems/os-std-mirror](https://github.com/reframe-systems/os-std-mirror/)**, maintained on two branches:
 
 - **`with-versions`** — each commit mirrors an Onshape document version exactly, including `import-log.toml` (a history of all imports with version name and retrieval date). Commit messages include the Onshape version name.
 - **`without-versions`** — identical file tree, but with FeatureScript version strings stripped and `import-log.toml` omitted. Useful for diffing purely on content changes across Onshape releases.
@@ -17,7 +17,13 @@ The imported library is published at **[jnewth-reframe/os-std-mirror](https://gi
 4. Writes `.fs` files into the output repo, appends an entry to `import-log.toml`, and commits to `with-versions`.
 5. Checks out `without-versions`, copies the `.fs` files over, strips version strings, and commits (without `import-log.toml`).
 
-The tool never creates branches or pushes — both branches must already exist, and pushing is the caller's responsibility.
+The tool never creates branches — both must already exist in the output repo. In CLI mode the tool does not push; the caller is responsible. In Lambda and GitHub Actions modes the tool pushes automatically after committing.
+
+## Scheduled operation
+
+Imports run automatically every Friday at 9 PM ET via the **GitHub Actions workflow** (`.github/workflows/import.yml`). This is the primary means of operation.
+
+An **AWS Lambda** implementation also exists in this repo (`main.go` detects Lambda mode via `AWS_LAMBDA_FUNCTION_NAME`) and is deployed to `us-east-1`. It is currently disabled and kept for reference. The Lambda fetches credentials from AWS Secrets Manager and clones/pushes the output repo using a deploy key.
 
 ## Build and run
 

@@ -30,7 +30,7 @@ const (
 
 var (
 	fsVersionRe     = regexp.MustCompile(`(?m)^(FeatureScript )[\d.]+;`)
-	importVersionRe = regexp.MustCompile(`, version : "[\d.]+"`)
+	importVersionRe = regexp.MustCompile(`, version\s*:\s*"[\d.]+"`)
 )
 
 type Settings struct {
@@ -252,8 +252,9 @@ func commitWithoutVersions(outDir, versionName, date string) {
 }
 
 // runImport executes the full import cycle. If push is true, both branches and
-// all tags are pushed to origin after committing (Lambda mode).
-func runImport(s Settings, outDir, docURL string, dryRun, verbose, push bool) error {
+// all tags are pushed to origin after committing (Lambda mode). If force is
+// true, the version-match check is skipped and the import runs unconditionally.
+func runImport(s Settings, outDir, docURL string, dryRun, verbose, push, force bool) error {
 	if docURL == "" {
 		docURL = defaultDocURL
 	}
@@ -261,7 +262,7 @@ func runImport(s Settings, outDir, docURL string, dryRun, verbose, push bool) er
 	version := getLatestVersion(s, docID)
 	last := readLatestImportedVersion(outDir)
 
-	if last == version.Name {
+	if !force && last == version.Name {
 		fmt.Println("Repo is at or ahead of Onshape document version")
 		return nil
 	}
@@ -277,7 +278,9 @@ func runImport(s Settings, outDir, docURL string, dryRun, verbose, push bool) er
 	appendImportLog(outDir, version.Name, date)
 	commitWithVersions(outDir, version.Name, date)
 	commitWithoutVersions(outDir, version.Name, date)
-	gitRun(outDir, "tag", version.Name, "with-versions")
+	if !force {
+		gitRun(outDir, "tag", version.Name, "with-versions")
+	}
 
 	if push {
 		gitRun(outDir, "push", "origin", "with-versions")
@@ -388,7 +391,7 @@ func lambdaHandler(ctx context.Context, _ json.RawMessage) error {
 		return err
 	}
 	cloneRepo(repoURL, "/tmp/work")
-	return runImport(s, "/tmp/work", docURL, false, true, true)
+	return runImport(s, "/tmp/work", docURL, false, true, true, false)
 }
 
 func main() {
@@ -401,6 +404,7 @@ func main() {
 	outFlag := flag.String("out", "", "")
 	dryRunFlag := flag.Bool("d", false, "")
 	verboseFlag := flag.Bool("v", false, "")
+	forceFlag := flag.Bool("force", false, "")
 	docURLFlag := flag.String("onshape-doc-url", "", "")
 
 	flag.Usage = func() {
@@ -414,6 +418,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Optional:\n")
 		fmt.Fprintf(os.Stderr, "  -d                        Dry run: check version only, no download or commit\n")
 		fmt.Fprintf(os.Stderr, "  -v                        Verbose: print each element name as fetched\n")
+		fmt.Fprintf(os.Stderr, "  -force                    Force import even if repo is already at latest version\n")
 		fmt.Fprintf(os.Stderr, "  --onshape-doc-url=<url>   Target document (default: Onshape standard library)\n\n")
 		fmt.Fprintf(os.Stderr, "Credential modes (useProxy field in settings file):\n")
 		fmt.Fprintf(os.Stderr, "  false   accessKey + secretKey   direct Onshape API\n")
@@ -446,7 +451,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := runImport(s, *outFlag, *docURLFlag, *dryRunFlag, *verboseFlag, false); err != nil {
+	if err := runImport(s, *outFlag, *docURLFlag, *dryRunFlag, *verboseFlag, false, *forceFlag); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

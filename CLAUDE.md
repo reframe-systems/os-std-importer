@@ -29,7 +29,7 @@ The settings file (gitignored) selects the API endpoint. `-settings` defaults to
 
 - `URL` — required in all modes; set to the API base URL (e.g. `https://cad.onshape.com/api/v14` for direct, `https://onshape.reframe.quest/api/v12` for production proxy, `http://localhost:5080/api/v12` for local proxy)
 - `useProxy: false` — direct Onshape API; requires `accessKey` + `secretKey`
-- `useProxy: true` — via a Reframe proxy; requires `onshapeKey` + `proxyKey`
+- `useProxy: true` — via a Reframe proxy; requires `onshapeKey` + `proxyKey`. Requests also carry `ReframeClientId: os-std-importer`, which must stay registered in `apps/onshape_proxy/src/client_ids.py` in the Nucleus repo (the proxy rejects unknown IDs with 400 and caps unidentified callers at 250 requests/day, fewer than one full import).
 
 The pre-commit hook in `hooks/pre-commit` blocks commits that include credential files. To install: `cp hooks/pre-commit .git/hooks/pre-commit`.
 

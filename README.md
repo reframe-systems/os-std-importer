@@ -60,6 +60,8 @@ The settings file is gitignored. Copy `remote.json.template`, name it `remote.js
 | `URL` | API base URL — `https://cad.onshape.com/api/v14` for direct; `https://onshape.reframe.quest/api/v12` or `http://localhost:5080/api/v12` for proxy |
 | `useProxy` | `false` → auth with `accessKey` + `secretKey`; `true` → auth with `onshapeKey` + `proxyKey` |
 
+In proxy mode the tool also identifies itself with the `ReframeClientId: os-std-importer` header. The proxy meters requests per client ID and rejects IDs it does not know, so the ID is registered (with its daily limit) in `apps/onshape_proxy/src/client_ids.py` in the [Nucleus](https://github.com/reframe-systems/Nucleus) repo. A full import is one request per Feature Studio, well above the cap for unidentified callers.
+
 ### Local proxy setup
 
 When using a local proxy (`URL: http://localhost:5080/api/v12`, `useProxy: true`), the proxy process must be started with a matching key:

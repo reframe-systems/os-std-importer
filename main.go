@@ -26,6 +26,13 @@ import (
 const (
 	defaultDocURL = "https://cad.onshape.com/documents/12312312345abcabcabcdeff/w/a855e4161c814f2e9ab3698a"
 	apiBase       = "https://cad.onshape.com/api/v14"
+
+	// reframeClientID identifies this tool to the Reframe Onshape proxy's
+	// per-client daily rate limiter (ReframeClientId header). The proxy only
+	// accepts IDs registered in apps/onshape_proxy/src/client_ids.py in the
+	// Nucleus repo; requests without an ID share a small anonymous bucket that
+	// a full import (one request per Feature Studio) exceeds.
+	reframeClientID = "os-std-importer"
 )
 
 var (
@@ -113,6 +120,7 @@ func apiGet(s Settings, endpoint string, params url.Values) []byte {
 	if s.UseProxy {
 		req.Header.Set("Authorization", "Basic "+s.OnshapeKey)
 		req.Header.Set("ReframeApiKey", s.ProxyKey)
+		req.Header.Set("ReframeClientId", reframeClientID)
 	} else {
 		req.SetBasicAuth(s.AccessKey, s.SecretKey)
 	}
